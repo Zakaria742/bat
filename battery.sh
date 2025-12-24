@@ -1,58 +1,61 @@
 #!/bin/bash
 
-
 con_mode=/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/conservation_mode
-charge_status=$(</sys/class/power_supply/BAT1/status)
-
-if [[ ! $LOGNAME == "root" ]];then
+if [[ $UID -ne 0 ]];then
 	echo "You need to be root in order to run this program"
-exit 1
-else
-	chmod +w "$con_mode"
+	exit 1
 fi
 
+
+chmod +w $con_mode
+charge_status=$(</sys/class/power_supply/BAT1/status)
 capacity=$(</sys/class/power_supply/BAT1/capacity)
 current_mode=$(<$con_mode)
-check_cycle=300
-echo "Program started"
-if [[ $current_mode -eq 1 ]];then
-	echo "Conservation mode is on"
-else
-	echo "Conservation mode is off"
-fi
 
-if [[ $capacity == 100 ]];then
+if [[ "$capacity" -ge 99 ]];then
 	echo "Device already charged, turning on conservation mode"
 	echo "1" > $con_mode
-
-else if [[ $current_mode -eq 1 && $capacity -lt 100 ]];then
-	sudo echo "0" > $con_mode
+	
+	exit 0
+fi
+if [[ "$current_mode" -eq 1 ]];then
+	echo "Conservation mode is on"
+	echo "0" > $con_mode
 	echo "Conservation mode has been unset"
+else
+	echo "Conservation mode is already off"
 fi
-fi
+
 clear
 
 i=0
-array=('|' '\' '-' '/')
+a=0
+anim=('|' '\' '-' '/')
+t=('\' '/')
 tput civis
 trap "tput cnorm" EXIT
-while [ $capacity -lt 100 ];do
-	if [[ $capacity -ge 99 ]];then
-		echo "charged!"
-		break;
+
+while [ "$capacity" -lt 99 ];do
+
+
+	i=$(( i%4 ))
+
+	if [[ $i == 0 ]];then
+		a=$(( a+1 ))
 	fi
-        i=$(( i%4 ))
-        sleep 0.1s
+
 	capacity=$(</sys/class/power_supply/BAT1/capacity)
 	charge_status=$(</sys/class/power_supply/BAT1/status)
-	if [[ $charge_status == "Discharging" ]];then
-		echo -e "\x1b[2J\x1b[H[${array[i++]}] Current Battery Percentage : $capacity%\nI think your device is currently unplugged (^  ^)"
+
+	if [[ "$charge_status" == "Discharging" ]];then
+		echo -e "\x1b[2J\x1b[H\x1b[32m[${anim[i++]}]\x1b[0m Current Battery Percentage : $capacity%\n\nI think your device is currently unplugged ${t[a%2]}(*  o  *)${t[$(((a+1)%2))]}"
 	else
-		echo -e "\x1b[2J\x1b[H[${array[i++]}] Current Battery Percentage : $capacity%"
+		echo -e "\x1b[2J\x1b[H\x1b[32m[${anim[i++]}]\x1b[0m Current Battery Percentage : $capacity%\n\nYou're device is currently charging ${t[a%2]}(^  o  ^)${t[$(((a+1)%2))]}"
 	fi
 
-	#echo -e "\x1b[2J\x1b[HCurrent battery percentage : $capacity%"
-	#sleep $check_cycle
+	sleep 0.2
+
 done
 
+echo -e "\nDevice is charged!\n"
 echo "1" > $con_mode
